@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Controle de Estudos - PRF</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+        }
+        h2 {
+            margin-top: 30px;
+        }
+        .tema {
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        label {
+            margin-right: 10px;
+        }
+        .progresso {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        .grafico {
+            margin-top: 20px;
+            width: 300px;
+            height: 150px;
+        }
+    </style>
+</head>
+<body>
+<h1>Controle de Estudos - PRF</h1>
+
+<div id="conteudo"></div>
+
+<div class="progresso" id="progresso"></div>
+<canvas id="graficoAcertos" class="grafico"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const topicos = {
+        "Língua Portuguesa": ["Compreensão e Interpretação de Textos", "Ortografia Oficial", "Acentuação Gráfica", "Pontuação", "Classes de Palavras", "Emprego de Tempos e Modos Verbais", "Concordância Nominal e Verbal", "Regência Nominal e Verbal", "Crase", "Semântica", "Figuras de Linguagem"],
+        "Matemática e Raciocínio Lógico": ["Conjuntos", "Equações e Inequações", "Funções", "Progressões", "Porcentagem", "Razão e Proporção", "Regra de Três", "Probabilidade", "Estatística", "Lógica Proposicional", "Diagramas Lógicos"],
+        "Informática": ["Conceitos Básicos", "Sistemas Operacionais", "Pacote Office", "Internet e Intranet", "Segurança da Informação", "Backup", "Redes de Computadores"],
+        "Ética no Serviço Público": ["Código de Ética Profissional do Servidor Público", "Comissão de Ética Pública", "Deveres e Proibições dos Servidores Públicos"],
+        "Geopolítica Brasileira": ["Geografia Física e Política do Brasil", "Integração Regional", "Políticas Públicas de Segurança", "Organizações Internacionais"],
+        "Legislação de Trânsito": ["Código de Trânsito Brasileiro", "Resoluções do CONTRAN", "Infrações e Penalidades", "Direção Defensiva", "Primeiros Socorros"],
+        "Direitos Humanos e Cidadania": ["Declaração Universal dos Direitos Humanos", "Constituição Federal - Direitos e Garantias Fundamentais", "Estatuto da Igualdade Racial", "Estatuto da Criança e do Adolescente", "Estatuto do Idoso"],
+        "Legislação Institucional": ["Lei nº 9.503/1997 (CTB)", "Lei nº 10.826/2003 (Estatuto do Desarmamento)", "Lei nº 11.343/2006 (Lei de Drogas)", "Lei nº 13.675/2018 (Sistema Único de Segurança Pública)", "Lei nº 13.869/2019 (Abuso de Autoridade)"]
+    };
+
+    const conteudoDiv = document.getElementById("conteudo");
+    const progressoDiv = document.getElementById("progresso");
+
+    function loadState() {
+        return JSON.parse(localStorage.getItem("controleEstudosPRF") || "{}");
+    }
+
+    function saveState(state) {
+        localStorage.setItem("controleEstudosPRF", JSON.stringify(state));
+    }
+
+    function calcularProgresso(state) {
+        let total = 0;
+        let concluido = 0;
+        for (const key in state) {
+            const item = state[key];
+            for (const tipo in item) {
+                if (["estudado", "resumo", "flash", "questoes", "r1", "r2", "r3"].includes(tipo)) {
+                    total++;
+                    if (item[tipo]) concluido++;
+                }
+            }
+        }
+        return total === 0 ? 0 : Math.round((concluido / total) * 100);
+    }
+
+    function avaliarDesempenho(progresso) {
+        if (progresso >= 75) return "Desenvolvimento Contínuo";
+        if (progresso >= 50) return "Em Desenvolvimento";
+        return "A Desejar";
+    }
+
+    function render() {
+        conteudoDiv.innerHTML = "";
+        const state = loadState();
+        for (const [disciplina, temas] of Object.entries(topicos)) {
+            const h2 = document.createElement("h2");
+            h2.textContent = disciplina;
+            conteudoDiv.appendChild(h2);
+
+            temas.forEach((tema, idx) => {
+                const id = `${disciplina}-${idx}`;
+                const temaDiv = document.createElement("div");
+                temaDiv.className = "tema";
+                temaDiv.innerHTML = `
+                    <strong>${tema}</strong><br />
+                    <label><input type="checkbox" data-id="${id}" data-type="estudado"> Estudado</label>
+                    <label><input type="checkbox" data-id="${id}" data-type="resumo"> Resumo</label>
+                    <label><input type="checkbox" data-id="${id}" data-type="flash"> Flashcards</label>
+                    <label><input type="checkbox" data-id="${id}" data-type="questoes"> Questões</label>
+                    <label><input type="checkbox" data-id="${id}" data-type="r1"> R1</label>
+                    <label><input type="checkbox" data-id="${id}" data-type="r2"> R2</label>
+                    <label><input type="checkbox" data-id="${id}" data-type="r3"> R3</label><br />
+                    Questões Hoje: <input type="number" min="0" data-id="${id}" data-type="qtdHoje" style="width:60px;">
+                    Total: <input type="number" min="0" data-id="${id}" data-type="qtdTotal" style="width:60px;">
+                    Certas: <input type="number" min="0" data-id="${id}" data-type="qtdCertas" style="width:60px;">
+                `;
+                conteudoDiv.appendChild(temaDiv);
+
+                Array.from(temaDiv.querySelectorAll("input")).forEach(input => {
+                    const { id, type } = input.dataset;
+                    if (!state[id]) state[id] = {};
+                    if (input.type === "checkbox") {
+                        input.checked = !!state[id][type];
+                        input.addEventListener("change", () => {
+                            state[id][type] = input.checked;
+                            saveState(state);
+                            atualizarProgresso();
+                            atualizarGrafico();
+                        });
+                    } else if (input.type === "number") {
+                        input.value = state[id][type] || 0;
+                        input.addEventListener("input", () => {
+                            state[id][type] = parseInt(input.value) || 0;
+                            saveState(state);
+                            atualizarGrafico();
+                        });
+                    }
+                });
+            });
+        }
+        atualizarProgresso();
+        atualizarGrafico();
+    }
+
+    function atualizarProgresso() {
+        const state = loadState();
+        const progresso = calcularProgresso(state);
+        const desempenho = avaliarDesempenho(progresso);
+        progressoDiv.textContent = `Progresso Geral: ${progresso}% - ${desempenho}`;
+    }
+
+    function atualizarGrafico() {
+        const state = loadState();
+        let total = 0;
+        let certas = 0;
+        for (const key in state) {
+            total += state[key]["qtdTotal"] || 0;
+            certas += state[key]["qtdCertas"] || 0;
+        }
+        const porcentagem = total ? Math.round((certas / total) * 100) : 0;
+
+        graficoAcertos.data.datasets[0].data = [porcentagem];
+        graficoAcertos.options.plugins.tooltip.callbacks.label = () => `${porcentagem}% de acertos`;
+        graficoAcertos.update();
+    }
+
+    const ctx = document.getElementById("graficoAcertos").getContext("2d");
+    const graficoAcertos = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Desempenho Geral'],
+            datasets: [{
+                label: '% de Acertos',
+                data: [0],
+                backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            scales: {
+                x: {
+                    min: 0,
+                    max: 100,
+                    ticks: { stepSize: 10, callback: val => `${val}%` }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: true }
+            }
+        }
+    });
+
+    render();
+</script>
+</body>
+</html>
